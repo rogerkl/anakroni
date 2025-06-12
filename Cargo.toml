@@ -1,0 +1,30 @@
+[workspace]
+members = [
+    "lib",
+    "cli", 
+    "web"
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "STFT audio processing library and tools"
+repository = "https://github.com/yourusername/stft-audio-processor"
+license = "MIT"
+
+[workspace.dependencies]
+stft_audio_lib = { path = "lib" }
+realfft = "3.3.0"
+rustfft = "6.1.0"  # Compatible version for complex FFT operations
+symphonia = { version = "0.5.4", features = ["all-codecs"] }
+hound = "3.5.0"
+num-complex = "0.4.3"
+clap = { version = "4.3.0", features = ["derive"] }
+rustyline = "15.0.0"
+console_error_panic_hook = "0.1.7"
+wasm-bindgen = "0.2.87"
+rand = "0.9.1"
+log = "0.4.27"
+image = "0.25.6"
