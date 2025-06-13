@@ -238,7 +238,7 @@ fn synthesize_with_oscillator_bank_impl(
     if stretch_start <= 0.0 || stretch_end <= 0.0 {
         return Err("Stretch factors must be positive".to_string());
     }
-    if shift_start < -1.0 || shift_start > 1.0 || shift_end < -1.0 || shift_end > 1.0 {
+    if !(-1.0..=1.0).contains(&shift_start) || !(-1.0..=1.0).contains(&shift_end) {
         return Err("Shift parameters must be between -1.0 and 1.0".to_string());
     }
     if output_frames == 0 {

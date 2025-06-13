@@ -129,7 +129,7 @@ pub fn analysis_summary(processor: &STFTProcessor) -> String {
     }
 
     let config = processor.config();
-    summary.push_str(&format!("STFT Config:\n"));
+    summary.push_str("STFT Config:\n");
     summary.push_str(&format!("  Window size: {} samples\n", config.window_size));
     summary.push_str(&format!(
         "  Overlap: {}% ({} factor)\n",
@@ -159,7 +159,7 @@ pub fn analysis_summary(processor: &STFTProcessor) -> String {
 
     // Add temporal FFT information if available
     if let Some(temporal) = processor.temporal_fft() {
-        summary.push_str(&format!("Temporal FFT Analysis:\n"));
+        summary.push_str("Temporal FFT Analysis:\n");
         summary.push_str(&format!("  Channels analyzed: {}\n", temporal.num_channels));
         summary.push_str(&format!(
             "  Temporal FFT size: {}\n",
@@ -189,7 +189,7 @@ pub fn analysis_summary(processor: &STFTProcessor) -> String {
 
         // Show per-channel information if multiple channels
         if temporal.num_channels > 1 {
-            summary.push_str(&format!("  Per-channel details:\n"));
+            summary.push_str("  Per-channel details:\n");
             for ch_idx in 0..temporal.num_channels {
                 let channel_bins: Vec<_> = temporal
                     .bin_ffts

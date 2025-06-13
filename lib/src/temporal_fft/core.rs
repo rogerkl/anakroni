@@ -1,9 +1,7 @@
 //! Core types and structures for temporal FFT analysis
 
-use crate::stft::STFTFrame;
 use crate::Result;
 use num_complex::Complex64;
-use std::sync::Arc;
 
 /// Configuration for temporal FFT analysis
 #[derive(Debug, Clone, Copy)]

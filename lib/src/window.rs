@@ -8,8 +8,10 @@ use std::fmt;
 
 /// Window function types available for STFT analysis
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Default)]
 pub enum WindowType {
     /// Hanning window (recommended default)
+    #[default]
     Hanning,
     /// Hamming window
     Hamming,
@@ -19,11 +21,6 @@ pub enum WindowType {
     Bartlett,
 }
 
-impl Default for WindowType {
-    fn default() -> Self {
-        WindowType::Hanning
-    }
-}
 
 impl fmt::Display for WindowType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

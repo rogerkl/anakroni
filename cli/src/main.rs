@@ -19,8 +19,7 @@ use stft_audio_lib::{
 
 #[cfg(feature = "image")]
 use stft_audio_lib::spectrogram::{
-    image::{save_spectrogram, ColorMap, SpectrogramImageOptions},
-    FrequencyScale, Spectrogram,
+    image::{save_spectrogram, ColorMap, SpectrogramImageOptions}, Spectrogram,
 };
 
 /// Application state
@@ -200,7 +199,7 @@ fn process_command(command: &str, state: &mut AppState) {
             match param {
                 "window_size" => match value.parse::<usize>() {
                     Ok(size) => {
-                        let current_config = state.processor.config().clone();
+                        let current_config = *state.processor.config();
                         match STFTConfig::new(
                             size,
                             current_config.overlap_factor,
@@ -218,7 +217,7 @@ fn process_command(command: &str, state: &mut AppState) {
 
                 "overlap" => match value.parse::<usize>() {
                     Ok(overlap) => {
-                        let current_config = state.processor.config().clone();
+                        let current_config = *state.processor.config();
                         match STFTConfig::new(
                             current_config.window_size,
                             overlap,
@@ -247,7 +246,7 @@ fn process_command(command: &str, state: &mut AppState) {
                         }
                     };
 
-                    let current_config = state.processor.config().clone();
+                    let current_config = *state.processor.config();
                     match STFTConfig::new(
                         current_config.window_size,
                         current_config.overlap_factor,
@@ -313,7 +312,7 @@ fn process_command(command: &str, state: &mut AppState) {
             match parts[1].parse::<usize>() {
                 Ok(n) => {
                     if let Some(preset) = presets::get_preset(n) {
-                        state.processor.set_config(preset.config.clone());
+                        state.processor.set_config(preset.config);
                         println!("Applied preset {}: {}", n, preset.name);
                         println!("{}", preset.description);
                     } else {
@@ -506,7 +505,7 @@ fn process_command(command: &str, state: &mut AppState) {
             let shift_start = if parts.len() > 2 {
                 match parts[2].parse::<f64>() {
                     Ok(v) => {
-                        if v < -1.0 || v > 1.0 {
+                        if !(-1.0..=1.0).contains(&v) {
                             println!("Error: shift_start must be between -1.0 and 1.0, got {}", v);
                             return;
                         }
@@ -554,7 +553,7 @@ fn process_command(command: &str, state: &mut AppState) {
             let shift_end = if parts.len() > 5 {
                 match parts[5].parse::<f64>() {
                     Ok(v) => {
-                        if v < -1.0 || v > 1.0 {
+                        if !(-1.0..=1.0).contains(&v) {
                             println!("Error: shift_end must be between -1.0 and 1.0, got {}", v);
                             return;
                         }
@@ -1276,7 +1275,7 @@ fn process_command(command: &str, state: &mut AppState) {
 
                     let strength = match parts[3].parse::<f64>() {
                         Ok(s) => {
-                            if s < 0.0 || s > 1.0 {
+                            if !(0.0..=1.0).contains(&s) {
                                 println!("Error: strength must be between 0.0 and 1.0");
                                 return;
                             }
@@ -1877,7 +1876,7 @@ fn main() {
 
     // Apply command line configuration
     let mut config_changed = false;
-    let mut current_config = state.processor.config().clone();
+    let mut current_config = *state.processor.config();
 
     if let Some(window_size_str) = matches.get_one::<String>("window-size") {
         if let Ok(size) = window_size_str.parse::<usize>() {

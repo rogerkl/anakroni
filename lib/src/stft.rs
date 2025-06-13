@@ -35,7 +35,7 @@ impl STFTConfig {
     /// Create a new STFT configuration with validation
     pub fn new(window_size: usize, overlap_factor: usize, window_type: WindowType) -> Result<Self> {
         // Validate window size (must be power of 2)
-        if !window_size.is_power_of_two() || window_size < 2 || window_size > 65536 {
+        if !window_size.is_power_of_two() || !(2..=65536).contains(&window_size) {
             return Err(format!(
                 "Window size must be a power of 2 between 256 and 4096, got {}",
                 window_size
@@ -43,7 +43,7 @@ impl STFTConfig {
         }
 
         // Validate overlap factor (based on Ceres: 1-32)
-        if overlap_factor < 1 || overlap_factor > 32 {
+        if !(1..=32).contains(&overlap_factor) {
             return Err(format!(
                 "Overlap factor must be between 1 and 32, got {}",
                 overlap_factor
@@ -282,7 +282,7 @@ mod tests {
     #[test]
     fn test_stft_analysis_synthesis() {
         let config = STFTConfig::default();
-        let analyzer = STFTAnalyzer::new(config.clone()).unwrap();
+        let analyzer = STFTAnalyzer::new(config).unwrap();
         let synthesizer = STFTSynthesizer::new(config).unwrap();
 
         // Generate test signal (sine wave)

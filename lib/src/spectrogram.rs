@@ -5,7 +5,6 @@
 
 use crate::stft::STFTFrame;
 use crate::Result;
-use num_complex::Complex64;
 
 /// Frequency scale type for spectrogram display
 #[derive(Debug, Clone, Copy, PartialEq)]

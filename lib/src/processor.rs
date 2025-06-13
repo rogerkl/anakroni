@@ -134,7 +134,7 @@ impl STFTProcessor {
     pub fn analyze(&mut self) -> Result<()> {
         let channel_data = self.channel_data.as_ref().ok_or("No audio data loaded")?;
 
-        let analyzer = STFTAnalyzer::new(self.config.clone())?;
+        let analyzer = STFTAnalyzer::new(self.config)?;
         let mut all_frames = Vec::with_capacity(channel_data.len());
 
         for (channel_idx, channel) in channel_data.iter().enumerate() {
@@ -308,7 +308,7 @@ impl STFTProcessor {
             .as_ref()
             .ok_or("No STFT analysis available. Call analyze() first.")?;
 
-        let synthesizer = STFTSynthesizer::new(self.config.clone())?;
+        let synthesizer = STFTSynthesizer::new(self.config)?;
         let mut synthesized_channels = Vec::with_capacity(frames.len());
 
         for (channel_idx, channel_frames) in frames.iter().enumerate() {
@@ -337,7 +337,7 @@ impl STFTProcessor {
     pub fn expected_num_frames(&self) -> Option<usize> {
         self.channel_data.as_ref().map(|channels| {
             if let Some(first_channel) = channels.first() {
-                let analyzer = STFTAnalyzer::new(self.config.clone()).unwrap();
+                let analyzer = STFTAnalyzer::new(self.config).unwrap();
                 analyzer.num_frames(first_channel.len())
             } else {
                 0
@@ -499,13 +499,13 @@ impl STFTProcessor {
         let shift_start_val = shift_start.unwrap_or(0.0);
         let shift_end_val = shift_end.unwrap_or(shift_start_val);
 
-        if shift_start_val < -1.0 || shift_start_val > 1.0 {
+        if !(-1.0..=1.0).contains(&shift_start_val) {
             return Err(format!(
                 "shift_start must be between -1.0 and 1.0, got {}",
                 shift_start_val
             ));
         }
-        if shift_end_val < -1.0 || shift_end_val > 1.0 {
+        if !(-1.0..=1.0).contains(&shift_end_val) {
             return Err(format!(
                 "shift_end must be between -1.0 and 1.0, got {}",
                 shift_end_val
@@ -770,7 +770,7 @@ impl STFTProcessor {
     pub fn apply_temporal_blur(&mut self, radius: usize, strength: f64) -> Result<()> {
         if let Some(temporal_fft) = &mut self.temporal_fft {
             // Validate parameters
-            if strength < 0.0 || strength > 1.0 {
+            if !(0.0..=1.0).contains(&strength) {
                 return Err(format!(
                     "Blur strength must be between 0.0 and 1.0, got {}",
                     strength
@@ -854,7 +854,7 @@ impl STFTProcessor {
         }
 
         // Step 2: Perform STFT analysis with the same configuration
-        let analyzer = STFTAnalyzer::new(self.config.clone())?;
+        let analyzer = STFTAnalyzer::new(self.config)?;
         let mut impulse_stft_frames = Vec::with_capacity(impulse_channels.len());
 
         for (ch_idx, channel_data) in impulse_channels.iter().enumerate() {
@@ -1089,7 +1089,7 @@ impl STFTProcessor {
         }
 
         // Analyze phase source with STFT
-        let analyzer = STFTAnalyzer::new(self.config.clone())?;
+        let analyzer = STFTAnalyzer::new(self.config)?;
         let mut phase_stft_frames = Vec::with_capacity(phase_channels.len());
 
         for (ch_idx, channel_data) in phase_channels.iter().enumerate() {
