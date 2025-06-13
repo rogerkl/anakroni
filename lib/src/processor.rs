@@ -633,7 +633,10 @@ impl STFTProcessor {
             ("Shift Up", (1.0, 0.2, 1.0, None, None, None)),
             ("Shift Down", (1.0, -0.2, 1.0, None, None, None)),
             ("Dispersive", (1.0, 0.0, 1.5, None, None, None)),
-            ("Time Stretch to Compress", (0.5, 0.0, 1.0, Some(2.0), None, None)),
+            (
+                "Time Stretch to Compress",
+                (0.5, 0.0, 1.0, Some(2.0), None, None),
+            ),
             (
                 "Frequency Sweep",
                 (1.0, -0.3, 1.0, Some(1.0), Some(0.3), None),
@@ -1019,6 +1022,138 @@ impl STFTProcessor {
             Ok(())
         } else {
             Err("No temporal FFT data available. Run analyze_temporal() first.".to_string())
+        }
+    }
+
+    /// Apply temporal cross-synthesis using current magnitude and phase from external file
+    ///
+    /// This method:
+    /// 1. Loads the phase source audio file
+    /// 2. Performs STFT analysis using the same configuration
+    /// 3. Performs temporal FFT analysis
+    /// 4. Keeps magnitude from current temporal FFT, replaces phase with source
+    ///
+    /// # Parameters
+    ///
+    /// * `phase_path` - Path to audio file providing phase information
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// processor.apply_temporal_cross_synthesize("drums.wav")?;
+    /// ```
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn apply_temporal_cross_synthesize<P: AsRef<std::path::Path>>(
+        &mut self,
+        phase_path: P,
+    ) -> Result<()> {
+        use crate::audio_io::read_audio_file;
+        use crate::stft::{STFTAnalyzer, STFTFrame};
+        use crate::temporal_fft::{TemporalCrossSynthesize, TemporalFFTAnalyzer};
+
+        // Check that we have temporal FFT data
+        let main_temporal = self
+            .temporal_fft
+            .as_ref()
+            .ok_or("No temporal FFT data available. Run analyze_temporal() first.")?;
+
+        // Get the number of original frames from the main temporal FFT
+        let target_frame_count = if !main_temporal.bin_ffts.is_empty() {
+            main_temporal.bin_ffts[0].original_frames
+        } else {
+            return Err("Main temporal FFT has no data".to_string());
+        };
+
+        log::info!("Loading phase source from: {:?}", phase_path.as_ref());
+
+        // Load the phase source audio file
+        let (phase_info, phase_channels) = read_audio_file(phase_path.as_ref())
+            .map_err(|e| format!("Failed to load phase file: {}", e))?;
+
+        log::info!(
+            "Phase source: {} channels, {} Hz, {:.2}s",
+            phase_info.channels,
+            phase_info.sample_rate,
+            phase_info.duration_seconds
+        );
+
+        // Check sample rate compatibility
+        if let Some(main_info) = &self.audio_info {
+            if main_info.sample_rate != phase_info.sample_rate {
+                log::warn!(
+                    "Sample rate mismatch: current {} Hz, phase {} Hz. Results may be unexpected.",
+                    main_info.sample_rate,
+                    phase_info.sample_rate
+                );
+            }
+        }
+
+        // Analyze phase source with STFT
+        let analyzer = STFTAnalyzer::new(self.config.clone())?;
+        let mut phase_stft_frames = Vec::with_capacity(phase_channels.len());
+
+        for (ch_idx, channel_data) in phase_channels.iter().enumerate() {
+            log::info!("Analyzing phase source channel {}", ch_idx);
+            let mut frames = analyzer.analyze(channel_data)?;
+
+            // Match frame counts
+            if frames.len() < target_frame_count {
+                // Pad with empty frames
+                log::info!(
+                    "Padding phase frames from {} to {}",
+                    frames.len(),
+                    target_frame_count
+                );
+
+                let num_bins = if !frames.is_empty() {
+                    frames[0].spectrum.len()
+                } else {
+                    self.config.fft_bins()
+                };
+
+                while frames.len() < target_frame_count {
+                    frames.push(STFTFrame {
+                        spectrum: vec![Complex64::new(0.0, 0.0); num_bins],
+                        frame_index: frames.len(),
+                        time_position: frames.len() * self.config.hop_size(),
+                    });
+                }
+            } else if frames.len() > target_frame_count {
+                // Truncate frames
+                log::info!(
+                    "Truncating phase frames from {} to {}",
+                    frames.len(),
+                    target_frame_count
+                );
+                frames.truncate(target_frame_count);
+            }
+
+            phase_stft_frames.push(frames);
+        }
+
+        // Perform temporal FFT analysis on phase source
+        log::info!("Performing temporal FFT analysis on phase source");
+        let temporal_analyzer = TemporalFFTAnalyzer::new(self.temporal_config);
+        let phase_temporal = temporal_analyzer.analyze(&phase_stft_frames)?;
+
+        log::info!(
+            "Phase temporal FFT complete: {} channels, {} frequency bins",
+            phase_temporal.num_channels,
+            phase_temporal.num_frequency_bins
+        );
+
+        // Apply in-place cross-synthesis
+        if let Some(main_temporal_mut) = &mut self.temporal_fft {
+            let cross_synth = TemporalCrossSynthesize::new(phase_temporal);
+            cross_synth.apply(main_temporal_mut);
+
+            log::info!("Temporal cross-synthesis complete");
+            log::info!("Current temporal FFT now has:");
+            log::info!("  - Magnitude: from original analysis");
+            log::info!("  - Phase: from '{}'", phase_path.as_ref().display());
+            Ok(())
+        } else {
+            Err("Lost temporal FFT data during processing".to_string())
         }
     }
 }

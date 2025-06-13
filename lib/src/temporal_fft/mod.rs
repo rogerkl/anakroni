@@ -26,6 +26,7 @@ pub use operations::{
     DispersiveTemporalShift,
     TemporalBlur,     // Add this
     TemporalConvolve, // Add this
+    TemporalCrossSynthesize,
     TemporalHighpass,
     TemporalLowpass,
     TemporalOperation,

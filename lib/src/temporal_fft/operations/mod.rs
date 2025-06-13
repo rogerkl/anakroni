@@ -3,6 +3,7 @@
 mod basic;
 mod blur; // Add this
 mod convolve; // Add this
+mod cross_synthesis;
 mod phase_multiply;
 mod power; // Add this
 mod power_bin; // Add this
@@ -14,6 +15,7 @@ mod utils;
 pub use basic::{TemporalHighpass, TemporalLowpass, ZeroTemporalDC};
 pub use blur::TemporalBlur; // Add this
 pub use convolve::TemporalConvolve; // Add this
+pub use cross_synthesis::TemporalCrossSynthesize;
 pub use phase_multiply::{
     DispersiveTemporalPhaseMultiply, TemporalPhaseMultiply, TemporalPhaseReversal,
     TemporalPhaseScrambling,
@@ -116,5 +118,10 @@ impl TemporalFFTAnalysis {
     /// Apply power amplitude scaling per bin
     pub fn power_amplitude_per_bin(&mut self, factor: f64) {
         TemporalPowerAmplitudePerBin::new(factor).apply(self);
+    }
+
+    /// Apply temporal cross-synthesis with another temporal FFT
+    pub fn cross_synthesize(&mut self, phase_source: TemporalFFTAnalysis) {
+        TemporalCrossSynthesize::new(phase_source).apply(self);
     }
 }

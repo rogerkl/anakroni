@@ -113,9 +113,10 @@ fn print_temporal_processing_operations() {
     println!("  temporal_phase_reversal            - Apply phase reversal (-1.0 factor)");
     println!("  temporal_phase_scrambling <intensity> <seed> - Pseudo-random phase scrambling");
     println!("  temporal_blur <radius> <strength>  - Smooth temporal frequencies");
-    println!("  temporal_convolve <impulse_file>   - Convolve with impulse response");
     println!("  temporal_power_amplitude <factor>  - Raise amplitude to factor, normalized by all frequency bins");
     println!("  temporal_power_amplitude_per_bin <factor> - Raise amplitude to factor, normalized by current frequency bin");
+    println!("  temporal_convolve <impulse_file>   - Convolve with impulse response");
+    println!("  temporal_cross_synthesize <phase_file> - Combine magnitude and phase from different sources");
 }
 
 /// Process a user command
@@ -653,7 +654,9 @@ fn process_command(command: &str, state: &mut AppState) {
         "temporal_synthesize_osc_preset" => {
             if parts.len() != 2 {
                 println!("Usage: temporal_process temporal_synthesize_osc_preset <preset_name>");
-                println!("Available presets: Identity,Time Stretch,Time Compress,Shift Up,Shift Down,");
+                println!(
+                    "Available presets: Identity,Time Stretch,Time Compress,Shift Up,Shift Down,"
+                );
                 println!("                   Dispersive,Time Stretch to Compress,Frequency Sweep,");
                 println!("                   Complex Morph,Extreme Stretch");
                 println!("Use 'oscillator_presets' command to see detailed preset parameters.");
@@ -1052,9 +1055,7 @@ fn process_command(command: &str, state: &mut AppState) {
                             "  stretch_factor: Factor by which to stretch temporal frequencies"
                         );
                         println!("                  1.0 = no change");
-                        println!(
-                            "                  < 1.0 = time stretch"
-                        );
+                        println!("                  < 1.0 = time stretch");
                         println!("                  > 1.0 = time compress");
                         println!();
                         return;
@@ -1334,6 +1335,61 @@ fn process_command(command: &str, state: &mut AppState) {
                                 println!("Use 'temporal_synthesize' to convert back to audio.");
                             }
                             Err(e) => println!("Error applying temporal convolution: {}", e),
+                        }
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        println!("Error: File operations are not supported in WebAssembly");
+                    }
+                }
+
+                "temporal_cross_synthesize" => {
+                    if parts.len() < 3 {
+                        println!("Usage: temporal_process temporal_cross_synthesize <phase_file>");
+                        println!("  phase_file: Audio file to use for phase spectrum");
+                        println!();
+                        println!("Description:");
+                        println!("  Keeps the magnitude evolution from the current temporal FFT");
+                        println!("  and replaces the phase evolution with phase from the specified file.");
+                        println!(
+                            "  The result has the amplitude envelope of the current sound but"
+                        );
+                        println!("  the temporal phase relationships of the phase source.");
+                        println!();
+                        println!("Example combinations:");
+                        println!(
+                            "  Current: Sustained pad + Phase: Rhythmic percussion = Rhythmic pad"
+                        );
+                        println!("  Current: Voice + Phase: Instrument = Vocoded instrument");
+                        println!(
+                            "  Current: Noise + Phase: Musical phrase = Textured musical phrase"
+                        );
+                        return;
+                    }
+
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        let phase_file = parts[2];
+
+                        // Check if file exists
+                        if !std::path::Path::new(phase_file).exists() {
+                            println!("Error: Phase file '{}' not found", phase_file);
+                            return;
+                        }
+
+                        println!("Applying temporal cross-synthesis:");
+                        println!("  Magnitude: from current temporal FFT");
+                        println!("  Phase: from '{}'", phase_file);
+
+                        match state.processor.apply_temporal_cross_synthesize(phase_file) {
+                            Ok(_) => {
+                                println!("Temporal cross-synthesis complete!");
+                                println!("The temporal FFT now contains:");
+                                println!("  - Original magnitude evolution (amplitude envelopes)");
+                                println!("  - Phase evolution from '{}'", phase_file);
+                                println!("Use 'temporal_synthesize' to convert back to audio.");
+                            }
+                            Err(e) => println!("Error applying temporal cross-synthesis: {}", e),
                         }
                     }
                     #[cfg(target_arch = "wasm32")]
