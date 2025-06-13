@@ -24,6 +24,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4aa90d7ce82d4be67b64039a3d588d38dbcc6736577de4a847025ce5b0c468d1"
 
 [[package]]
+name = "anakroni_cli"
+version = "0.1.0"
+dependencies = [
+ "anakroni_lib",
+ "clap",
+ "env_logger",
+ "log",
+ "num-complex",
+ "rustyline",
+]
+
+[[package]]
+name = "anakroni_lib"
+version = "0.1.0"
+dependencies = [
+ "console_error_panic_hook",
+ "env_logger",
+ "hound",
+ "image",
+ "log",
+ "num-complex",
+ "realfft",
+ "rustfft",
+ "symphonia",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "anstream"
 version = "0.6.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1248,44 +1276,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
-name = "stft_audio_cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "env_logger",
- "log",
- "num-complex",
- "rustyline",
- "stft_audio_lib",
-]
-
-[[package]]
-name = "stft_audio_lib"
-version = "0.1.0"
-dependencies = [
- "console_error_panic_hook",
- "env_logger",
- "hound",
- "image",
- "log",
- "num-complex",
- "realfft",
- "rustfft",
- "symphonia",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "stft_audio_web"
 version = "0.1.0"
 dependencies = [
+ "anakroni_lib",
  "console_error_panic_hook",
  "js-sys",
  "log",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
- "stft_audio_lib",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

@@ -1,4 +1,4 @@
-//! STFT Audio Processor Library
+//! Anakroni Library
 //!
 //! A library for processing audio data using Short-Time Fourier Transform (STFT).
 //! Provides functionality for loading, analyzing, and reconstructing audio data

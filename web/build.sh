@@ -1,14 +1,14 @@
 #!/bin/bash
 # Build script for the WebAssembly module
 
-echo "Building STFT Audio Processor WASM module..."
+echo "Building Anakroni WASM module..."
 
 # Navigate to the web directory
 cd "$(dirname "$0")"
 
 # Build the library with wasm features
 echo "Building library with WASM features..."
-cargo build --release -p stft_audio_lib --features wasm
+cargo build --release -p anakroni_lib --features wasm
 
 # Build the WebAssembly module
 echo "Building WASM module..."

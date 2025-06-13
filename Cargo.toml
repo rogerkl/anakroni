@@ -15,7 +15,7 @@ repository = "https://github.com/yourusername/stft-audio-processor"
 license = "MIT"
 
 [workspace.dependencies]
-stft_audio_lib = { path = "lib" }
+anakroni_lib = { path = "lib" }
 realfft = "3.3.0"
 rustfft = "6.1.0"  # Compatible version for complex FFT operations
 symphonia = { version = "0.5.4", features = ["all-codecs"] }

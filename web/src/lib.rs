@@ -1,6 +1,6 @@
 use js_sys::Float32Array;
 use serde::Serialize;
-use stft_audio_lib::{
+use anakroni_lib::{
     audio_io::{read_audio_bytes, write_audio_bytes, AudioInfo},
     processor::STFTProcessor,
     stft::STFTConfig,
@@ -18,7 +18,7 @@ fn init_panic_hook() {
 #[wasm_bindgen(start)]
 pub fn start() {
     init_panic_hook();
-    stft_audio_lib::init();
+    anakroni_lib::init();
 }
 
 // Serde-compatible info structs for passing to JavaScript

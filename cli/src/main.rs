@@ -1,6 +1,6 @@
-//! STFT Audio Processor CLI
+//! Anakroni CLI
 //!
-//! Command-line interface for the STFT Audio Processor library.
+//! Command-line interface for the  Anakroni library.
 //! Provides an interactive shell for STFT-based audio processing operations.
 
 use std::process;
@@ -8,7 +8,7 @@ use std::process;
 use clap::{Arg, Command};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
-use stft_audio_lib::{
+use anakroni_lib::{
     processor::STFTProcessor,
     stft::STFTConfig,
     temporal_fft::TemporalFFTConfig,
@@ -18,7 +18,7 @@ use stft_audio_lib::{
 };
 
 #[cfg(feature = "image")]
-use stft_audio_lib::spectrogram::{
+use anakroni_lib::spectrogram::{
     image::{save_spectrogram, ColorMap, SpectrogramImageOptions}, Spectrogram,
 };
 
@@ -1570,12 +1570,12 @@ fn process_command(command: &str, state: &mut AppState) {
                 // Parse frequency scale
                 let frequency_scale = match scale.to_lowercase().as_str() {
                     "log" | "logarithmic" => {
-                        stft_audio_lib::spectrogram::FrequencyScale::Logarithmic
+                        anakroni_lib::spectrogram::FrequencyScale::Logarithmic
                     }
-                    "linear" => stft_audio_lib::spectrogram::FrequencyScale::Linear,
+                    "linear" => anakroni_lib::spectrogram::FrequencyScale::Linear,
                     _ => {
                         println!("Unknown scale: {}. Using linear.", scale);
-                        stft_audio_lib::spectrogram::FrequencyScale::Linear
+                        anakroni_lib::spectrogram::FrequencyScale::Linear
                     }
                 };
 
@@ -1718,7 +1718,7 @@ fn process_command(command: &str, state: &mut AppState) {
                 for &channel_idx in &channels_to_process {
                     // Configure options
                     let options =
-                        stft_audio_lib::temporal_fft::visualization::TemporalFFTImageOptions {
+                        anakroni_lib::temporal_fft::visualization::TemporalFFTImageOptions {
                             use_db_scale: false,
                             dynamic_range_db: 80.0,
                             db_reference: 1.0,
@@ -1736,7 +1736,7 @@ fn process_command(command: &str, state: &mut AppState) {
                     };
 
                     // Save the temporal FFT visualization
-                    match stft_audio_lib::temporal_fft::visualization::save_temporal_fft_image(
+                    match anakroni_lib::temporal_fft::visualization::save_temporal_fft_image(
                         temporal_analysis,
                         channel_idx,
                         &output_filename,
@@ -1834,9 +1834,9 @@ fn main() {
     //env_logger::init();
 
     // Parse command line arguments
-    let matches = Command::new("STFT Audio Processor")
-        .version(stft_audio_lib::VERSION)
-        .about("Short-Time Fourier Transform audio processing tool")
+    let matches = Command::new("Anakroni")
+        .version(anakroni_lib::VERSION)
+        .about("Temporal FFT processing of STFT frames")
         .arg(
             Arg::new("file")
                 .help("Audio file to load on startup")
@@ -1866,11 +1866,11 @@ fn main() {
         )
         .get_matches();
 
-    println!("STFT Audio Processor v{}", stft_audio_lib::VERSION);
+    println!("Anakroni v{}", anakroni_lib::VERSION);
     println!("Type 'help' for available commands\n");
 
     // Initialize the library
-    stft_audio_lib::init();
+    anakroni_lib::init();
 
     let mut state = AppState::new();
 
