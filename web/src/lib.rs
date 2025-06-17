@@ -1,5 +1,3 @@
-use js_sys::Float32Array;
-use serde::Serialize;
 use anakroni_lib::{
     audio_io::{read_audio_bytes, write_audio_bytes, AudioInfo},
     processor::STFTProcessor,
@@ -8,6 +6,8 @@ use anakroni_lib::{
     window::WindowType,
     Complex64, Result,
 };
+use js_sys::Float32Array;
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 // Set up panic hook for better error messages

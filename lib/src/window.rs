@@ -7,8 +7,7 @@ use std::f64::consts::PI;
 use std::fmt;
 
 /// Window function types available for STFT analysis
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum WindowType {
     /// Hanning window (recommended default)
     #[default]
@@ -20,7 +19,6 @@ pub enum WindowType {
     /// Bartlett (triangular) window
     Bartlett,
 }
-
 
 impl fmt::Display for WindowType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

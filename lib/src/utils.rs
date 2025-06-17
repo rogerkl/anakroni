@@ -115,6 +115,130 @@ pub fn frequency_to_bin(frequency: f64, sample_rate: u32, fft_size: usize) -> us
     (frequency * fft_size as f64 / sample_rate as f64).round() as usize
 }
 
+/// Distribute bins linearly, using either real or complex layout
+/// num_freq_bin is the number if frequencies we have
+/// Example we do fft on 1024 sample points = 512 num_freq_bins
+/// Real fft: dc + num_freqs = 513 bins (0=dc, 512=nyquist)
+/// Complex fft: dc + num_freqs + num_freqs-1 = 1024 bins (0=dc, 512=nyquist)
+pub fn distribute_lin_bins(num_freq_bins: usize, num_parts: usize, complex: bool) -> Vec<usize> {
+    let num_bins = if complex {
+        num_freq_bins * 2
+    } else {
+        num_freq_bins + 1
+    };
+    let mut bin_assignments = vec![0; num_bins];
+
+    // Assign each bin to a part
+    for bin in 0..num_freq_bins + 1 {
+        if bin == 0 {
+            // DC component - assign to first part
+            bin_assignments[bin] = 0;
+        } else {
+            bin_assignments[bin] = ((((bin - 1) as f32) / (num_freq_bins as f32))
+                * (num_parts as f32))
+                .floor() as usize;
+            if complex && bin <= num_freq_bins {
+                bin_assignments[num_bins - bin] = bin_assignments[bin];
+            }
+        }
+    }
+    bin_assignments
+}
+
+/// Distribute bins logarithmicly, using either real or complex layout
+/// num_freq_bin is the number if frequencies we have
+/// Example we do fft on 1024 sample points = 512 num_freq_bins
+/// Real fft: dc + num_freqs = 513 bins (0=dc, 512=nyquist)
+/// Complex fft: dc + num_freqs + num_freqs-1 = 1024 bins (0=dc, 512=nyquist)
+pub fn distribute_log_bins(num_freq_bins: usize, num_parts: usize, complex: bool) -> Vec<usize> {
+    let num_bins = if complex {
+        num_freq_bins * 2
+    } else {
+        num_freq_bins + 1
+    };
+    let mut bin_assignments = vec![0; num_bins];
+
+    // don't really need correct samplerate ...
+    let sample_rate = num_freq_bins as f32;
+    // Calculate frequency for each bin (excluding DC and Nyquist)
+    // Start from bin 1 to avoid log(0)
+    let min_freq = sample_rate / (2.0 * num_freq_bins as f32); // Frequency of bin 1
+    let max_freq = sample_rate / 2.0; // Nyquist frequency
+
+    // Calculate log frequency range
+    let log_min = min_freq.ln();
+    let log_max = max_freq.ln();
+    let log_range = log_max - log_min;
+
+    // Assign each bin to a part
+    for bin in 0..num_freq_bins + 1 {
+        if bin == 0 {
+            // DC component - assign to first part
+            bin_assignments[bin] = 0;
+        } else {
+            // Calculate frequency for this bin
+            let freq = (bin as f32) * sample_rate / (2.0 * num_freq_bins as f32);
+
+            // Convert to log scale
+            let log_freq = freq.ln();
+
+            // Normalize to 0-1 range
+            let normalized = (log_freq - log_min) / log_range;
+
+            // Calculate which part this bin belongs to
+            let part = (normalized * num_parts as f32).floor() as usize;
+
+            // Clamp to valid range (in case of floating point errors)
+            bin_assignments[bin] = part.min(num_parts - 1);
+            if complex && bin <= num_freq_bins {
+                bin_assignments[num_bins - bin] = bin_assignments[bin];
+            }
+        }
+    }
+    bin_assignments
+}
+
+/// Distribute bins with a group size, should pass either &distribute_lin_bins or &distribute_log_bins as the func parameter
+/// for linear distribution this is straightforward, say real fft, 16 bins,group size 2, num parts 4
+/// bin[0] = 0 (DC, special case)
+/// bin[1] = 0
+/// bin[2] = 0
+/// bin[3] = 1 // group size == 2, so change value after 2 bins
+/// bin[4] = 1
+/// bin[5] = 2
+/// bin[6] = 2
+/// bin[7] = 3
+/// bin[8] = 3
+/// bin[9] = 0 // number of parts reached, start at 0 again
+/// bin[10] = 0
+/// bin[11] = 1
+/// bin[12] = 1
+/// bin[13] = 2
+/// bin[14] = 2
+/// bin[15] = 3
+/// bin[16] = 4
+/// For the logarithmic case it's a little more complicated, the algorithm is:
+///   we distribute first in num_freq_bins/group_size parts
+///   then remap to num_parts using modulu operator
+/// The result is that we should still have the same musical frequencies per part as for
+/// the normal logarithmic distribution
+pub fn distribute_grouped(
+    num_freq_bins: usize,
+    num_parts: usize,
+    complex: bool,
+    group_size: usize,
+    func: &dyn Fn(usize, usize, bool) -> Vec<usize>,
+) -> Vec<usize> {
+    if group_size < 1 {
+        return func(num_freq_bins, num_parts, complex);
+    }
+    let mut bin_assignments = func(num_freq_bins, num_freq_bins / group_size, complex);
+    for bin in 1..num_freq_bins + 1 {
+        bin_assignments[bin] = bin_assignments[bin] % num_parts;
+    }
+    bin_assignments
+}
+
 /// Get analysis summary string for an STFTProcessor
 pub fn analysis_summary(processor: &STFTProcessor) -> String {
     let mut summary = String::new();

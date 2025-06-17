@@ -5,9 +5,6 @@
 
 use std::process;
 
-use clap::{Arg, Command};
-use rustyline::error::ReadlineError;
-use rustyline::DefaultEditor;
 use anakroni_lib::{
     processor::STFTProcessor,
     stft::STFTConfig,
@@ -16,10 +13,14 @@ use anakroni_lib::{
     window::WindowType,
     Complex64,
 };
+use clap::{Arg, Command};
+use rustyline::error::ReadlineError;
+use rustyline::DefaultEditor;
 
 #[cfg(feature = "image")]
 use anakroni_lib::spectrogram::{
-    image::{save_spectrogram, ColorMap, SpectrogramImageOptions}, Spectrogram,
+    image::{save_spectrogram, ColorMap, SpectrogramImageOptions},
+    Spectrogram,
 };
 
 /// Application state
@@ -1569,9 +1570,7 @@ fn process_command(command: &str, state: &mut AppState) {
 
                 // Parse frequency scale
                 let frequency_scale = match scale.to_lowercase().as_str() {
-                    "log" | "logarithmic" => {
-                        anakroni_lib::spectrogram::FrequencyScale::Logarithmic
-                    }
+                    "log" | "logarithmic" => anakroni_lib::spectrogram::FrequencyScale::Logarithmic,
                     "linear" => anakroni_lib::spectrogram::FrequencyScale::Linear,
                     _ => {
                         println!("Unknown scale: {}. Using linear.", scale);
