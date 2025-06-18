@@ -126,6 +126,7 @@ pub fn distribute_lin_bins(num_freq_bins: usize, num_parts: usize, complex: bool
     } else {
         num_freq_bins + 1
     };
+    log::info!("distribute_lin_bins num_freq_bins:{} num_parts:{} complex:{} num_bins:{}",num_freq_bins,num_parts,complex, num_bins);
     let mut bin_assignments = vec![0; num_bins];
 
     // Assign each bin to a part
@@ -156,6 +157,7 @@ pub fn distribute_log_bins(num_freq_bins: usize, num_parts: usize, complex: bool
     } else {
         num_freq_bins + 1
     };
+    log::info!("distribute_log_bins num_freq_bins:{} num_parts:{} complex:{} num_bins:{}",num_freq_bins,num_parts,complex, num_bins);
     let mut bin_assignments = vec![0; num_bins];
 
     // don't really need correct samplerate ...
@@ -229,11 +231,13 @@ pub fn distribute_grouped(
     group_size: usize,
     func: &dyn Fn(usize, usize, bool) -> Vec<usize>,
 ) -> Vec<usize> {
+    log::info!("distribute_grouped num_freq_bins:{} num_parts:{} complex:{} group_size:{}",num_freq_bins,num_parts,complex, group_size);
     if group_size < 1 {
         return func(num_freq_bins, num_parts, complex);
     }
-    let mut bin_assignments = func(num_freq_bins, num_freq_bins / group_size, complex);
-    for bin in 1..num_freq_bins + 1 {
+    let num_bins = num_freq_bins / group_size;
+    let mut bin_assignments = func(num_freq_bins, num_bins, complex);
+    for bin in 0..bin_assignments.len() {
         bin_assignments[bin] = bin_assignments[bin] % num_parts;
     }
     bin_assignments

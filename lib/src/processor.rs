@@ -6,11 +6,12 @@
 use crate::audio_io::AudioInfo;
 use crate::stft::{STFTAnalyzer, STFTConfig, STFTFrame, STFTSynthesizer};
 use crate::temporal_fft::{
-    TemporalFFTAnalysis, TemporalFFTAnalyzer, TemporalFFTConfig, TemporalFFTSynthesizer,
-    TemporalOperation, TemporalStatistics,
+    TemporalBinFFT, TemporalFFTAnalysis, TemporalFFTAnalyzer, TemporalFFTConfig,
+    TemporalFFTSynthesizer, TemporalOperation, TemporalStatistics,
 };
+use crate::utils::{distribute_grouped, distribute_lin_bins, distribute_log_bins};
 use crate::Result;
-use num_complex::Complex64;
+use num_complex::{Complex, Complex64};
 
 /// Main STFT processor for multi-channel audio
 pub struct STFTProcessor {
@@ -44,6 +45,120 @@ impl STFTProcessor {
             stft_frames: None,
             temporal_fft: None,
             temporal_config: TemporalFFTConfig::default(),
+        }
+    }
+
+    fn from_processor(processor: &STFTProcessor) -> Self {
+        let config = processor.config.clone();
+        let audio_info = processor.audio_info.clone();
+        let temporal_config = processor.temporal_config.clone();
+        Self {
+            config,
+            audio_info,
+            channel_data: None,
+            stft_frames: None,
+            temporal_fft: None,
+            temporal_config,
+        }
+    }
+
+    pub fn prepare_split_part(
+        &mut self,
+        part_index: usize,
+        num_parts: usize,
+        group_size: usize,
+        log: bool,
+    ) -> Result<STFTProcessor> {
+        log::info!("prepare_split_part  part_index:{} num_parts:{} group_size:{} log:{}",part_index,num_parts,group_size, log);
+        let config = self.config.clone();
+        let audio_info = self.audio_info.clone();
+        let temporal_config = self.temporal_config.clone();
+
+        let bin_assignments = if group_size == 0 {
+            if log {
+                distribute_log_bins(temporal_config.fft_size / 2, num_parts, true)
+            } else {
+                distribute_lin_bins(temporal_config.fft_size / 2, num_parts, true)
+            }
+        } else {
+            distribute_grouped(
+                temporal_config.fft_size / 2,
+                num_parts,
+                true,
+                group_size,
+                if log {
+                    &distribute_log_bins
+                } else {
+                    &distribute_lin_bins
+                },
+            )
+        };
+
+        match &self.temporal_fft {
+            None => {
+                return Err("No temporal_fft in data".to_string());
+            }
+            Some(temporal_fft) => {
+                let original_frames = temporal_fft.bin_ffts[0].original_frames;
+                let mut bin_ffts =
+                    Vec::with_capacity(temporal_fft.num_channels * temporal_fft.num_frequency_bins);
+
+                let mut bin_ffts_index = 0;
+
+                // Process each channel separately
+                for ch_idx in 0..temporal_fft.num_channels {
+                    log::info!(
+                        "Preparing temporal FFT split for channel {}/{}",
+                        ch_idx + 1,
+                        temporal_fft.num_channels
+                    );
+
+                    // Process each frequency bin in this channel
+                    for bin_idx in 0..temporal_fft.num_frequency_bins {
+                        log::debug!(
+                            "Channel {}, preparing temporal FFT split for bin {}/{}",
+                            ch_idx,
+                            bin_idx + 1,
+                            temporal_fft.num_frequency_bins
+                        );
+                        let mut temporal_spectrum = Vec::with_capacity(temporal_config.fft_size);
+
+                        for bin in 0..bin_assignments.len() {
+                            if bin_assignments[bin] == part_index {
+                                temporal_spectrum.push(
+                                    temporal_fft.bin_ffts[bin_ffts_index].temporal_spectrum[bin],
+                                );
+                            } else {
+                                temporal_spectrum.push(Complex64::new(0.0, 0.0));
+                            }
+                        }
+
+                        bin_ffts.push(TemporalBinFFT {
+                            bin_index: bin_idx,
+                            channel_index: ch_idx,
+                            temporal_spectrum,
+                            original_frames:temporal_config.fft_size,
+                        });
+                        bin_ffts_index += 1;
+                    }
+                }
+
+                let temporal_fft_split = TemporalFFTAnalysis {
+                    bin_ffts,
+                    config: temporal_config,
+                    num_frequency_bins: temporal_fft.num_frequency_bins,
+                    num_channels: temporal_fft.num_channels,
+                };
+                let split_processor = Self {
+                    config,
+                    audio_info,
+                    channel_data: None,
+                    stft_frames: None,
+                    temporal_fft: Some(temporal_fft_split),
+                    temporal_config,
+                };
+                Ok(split_processor)
+            }
         }
     }
 

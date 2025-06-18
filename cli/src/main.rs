@@ -61,6 +61,7 @@ fn print_help() {
     println!("  temporal_process <operation>       - Apply temporal processing operations");
     println!("  temporal_synthesize                - Convert temporal FFT back to STFT frames");
     println!("  temporal_synthesize_osc <stretch> [params...]   - Oscillator bank synthesis with parameter control");
+    println!("  temporal_split <filename> <num_parts> [group_size] [log]  - split temporal fft in num_parts, synthesize and save each part");
     println!("  process <operation> [params...]    - Apply processing operations");
     println!("  spectrogram <filename> [options]   - Generate spectrogram image");
     println!("  temporal_spectrogram <filename>    - Generate temporal FFT visualization");
@@ -760,6 +761,109 @@ fn process_command(command: &str, state: &mut AppState) {
                 }
                 println!();
             }
+        }
+
+        "temporal_split" => {
+            if parts.len() < 3 || parts.len() > 5 {
+                println!("Usage: temporal_split <filename> <num_parts> [group_size] [log]");
+                println!("  filename:  Base filename for output files (e.g., 'output.wav' will produce 'output_0.wav', etc.)");
+                println!("  num_parts: Number of files to split into");
+                println!("  group_size: Number of consecutive bins to group together (default: 1)");
+                println!("  log: distribute bins logarithmic");
+                return;
+            }
+
+            let filename = parts[1];
+
+            // Parse the num_parts parameter
+            let num_parts = match parts[2].parse::<usize>() {
+                Ok(value) => {
+                    if value == 0 {
+                        println!("Error: num_parts must be greater than zero");
+                        return;
+                    }
+                    value
+                }
+                Err(_) => {
+                    println!("Error: num_parts must be a valid positive integer");
+                    return;
+                }
+            };
+
+            // Parse the optional group_size parameter (default to 1 if not provided)
+            let group_size = if parts.len() >= 4 {
+                match parts[3].parse::<usize>() {
+                    Ok(value) => value,
+                    Err(_) => {
+                        println!("Error: group_size must be a valid positive integer");
+                        return;
+                    }
+                }
+            } else {
+                1 // Default group size
+            };
+
+            // Parse the optional log
+            let log = if parts.len() == 5 {
+                if "log" == parts[4].trim() {
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            println!(
+                "Splitting frequency spectrum into {} parts with group size {}...",
+                num_parts, group_size
+            );
+
+            // Generate output filenames based on the input filename
+            let mut output_filenames = Vec::new();
+
+            // Handle filenames with or without extension
+            let filename_parts: Vec<&str> = filename.rsplitn(2, '.').collect();
+            let (base_name, extension) = if filename_parts.len() == 2 {
+                (filename_parts[1], format!(".{}", filename_parts[0]))
+            } else {
+                (filename, String::from(""))
+            };
+
+            for i in 0..num_parts {
+                output_filenames.push(format!("{}_{}{}", base_name, i, extension));
+            }
+
+            // Ensure we have FFT data
+            if !state.processor.has_temporal_analysis() {
+                println!("No temporal FFT analysis available. Run temporal_analyze first.");
+                return;
+            }
+
+            // Process each part and save to a file
+            for (i, output_file) in output_filenames.iter().enumerate() {
+                println!("Processing part {}/{}...", i + 1, num_parts);
+                match state
+                    .processor
+                    .prepare_split_part(i, num_parts, group_size, log)
+                {
+                    Ok(mut split_processor) => {
+                        println!("Split part prepared");
+                        match split_processor.synthesize_from_temporal() {
+                            Ok(_) => {
+                                println!("Temporal synthesis for split part complete!");
+                                match utils::synthesize_and_save(&split_processor, output_file) {
+                                    Ok(_) => println!("File saved successfully!"),
+                                    Err(e) => println!("Error saving file: {}", e),
+                                }
+                            }
+                            Err(e) => println!("Error during temporal synthesis: {}", e),
+                        }
+                    }
+                    Err(e) => println!("Error saving file: {}", e),
+                }
+            }
+            println!("Temporal Frequency spectrum split completed");
         }
 
         "process" => {
