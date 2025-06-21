@@ -764,12 +764,14 @@ fn process_command(command: &str, state: &mut AppState) {
         }
 
         "temporal_split" => {
-            if parts.len() < 3 || parts.len() > 5 {
-                println!("Usage: temporal_split <filename> <num_parts> [group_size] [log]");
+            if parts.len() < 3 || parts.len() > 6 {
+                println!("Usage: temporal_split <filename> <num_parts> [group_size] [log|lin] [octaves]");
                 println!("  filename:  Base filename for output files (e.g., 'output.wav' will produce 'output_0.wav', etc.)");
                 println!("  num_parts: Number of files to split into");
                 println!("  group_size: Number of consecutive bins to group together (default: 1)");
-                println!("  log: distribute bins logarithmic");
+                println!("  log|lin: distribute bins logarithmic or linear");
+                println!("  how many octaves to distribute, dividing down from highest temporal frequency,");
+                println!("                            lower octaves will be distributed to the lowest part");
                 return;
             }
 
@@ -804,7 +806,7 @@ fn process_command(command: &str, state: &mut AppState) {
             };
 
             // Parse the optional log
-            let log = if parts.len() == 5 {
+            let log = if parts.len() >= 5 {
                 if "log" == parts[4].trim() {
                     true
                 } else {
@@ -812,6 +814,18 @@ fn process_command(command: &str, state: &mut AppState) {
                 }
             } else {
                 false
+            };
+
+            let octaves = if parts.len() == 6 {
+                match parts[5].parse::<u8>() {
+                    Ok(value) => value,
+                    Err(_) => {
+                        println!("Error: group_size must be a valid positive integer");
+                        return;
+                    }
+                }
+            } else {
+                0 // 0 = distribute all
             };
 
             println!(
@@ -839,13 +853,14 @@ fn process_command(command: &str, state: &mut AppState) {
                 println!("No temporal FFT analysis available. Run temporal_analyze first.");
                 return;
             }
+            log::info!("split - num_parts: {},group_size: {}, log: {}, octaves: {}",num_parts,group_size,log,octaves);
 
             // Process each part and save to a file
             for (i, output_file) in output_filenames.iter().enumerate() {
                 println!("Processing part {}/{}...", i + 1, num_parts);
                 match state
                     .processor
-                    .prepare_split_part(i, num_parts, group_size, log)
+                    .prepare_split_part(i, num_parts, group_size, log, octaves)
                 {
                     Ok(mut split_processor) => {
                         println!("Split part prepared");

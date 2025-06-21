@@ -120,7 +120,7 @@ pub fn frequency_to_bin(frequency: f64, sample_rate: u32, fft_size: usize) -> us
 /// Example we do fft on 1024 sample points = 512 num_freq_bins
 /// Real fft: dc + num_freqs = 513 bins (0=dc, 512=nyquist)
 /// Complex fft: dc + num_freqs + num_freqs-1 = 1024 bins (0=dc, 512=nyquist)
-pub fn distribute_lin_bins(num_freq_bins: usize, num_parts: usize, complex: bool) -> Vec<usize> {
+pub fn distribute_lin_bins(num_freq_bins: usize, num_parts: usize, complex: bool, octaves: u8) -> Vec<usize> {
     let num_bins = if complex {
         num_freq_bins * 2
     } else {
@@ -151,50 +151,58 @@ pub fn distribute_lin_bins(num_freq_bins: usize, num_parts: usize, complex: bool
 /// Example we do fft on 1024 sample points = 512 num_freq_bins
 /// Real fft: dc + num_freqs = 513 bins (0=dc, 512=nyquist)
 /// Complex fft: dc + num_freqs + num_freqs-1 = 1024 bins (0=dc, 512=nyquist)
-pub fn distribute_log_bins(num_freq_bins: usize, num_parts: usize, complex: bool) -> Vec<usize> {
+pub fn distribute_log_bins(num_freq_bins: usize, num_parts: usize, complex: bool, octaves: u8) -> Vec<usize> {
     let num_bins = if complex {
         num_freq_bins * 2
     } else {
         num_freq_bins + 1
     };
-    log::info!("distribute_log_bins num_freq_bins:{} num_parts:{} complex:{} num_bins:{}",num_freq_bins,num_parts,complex, num_bins);
+    log::info!("distribute_log_bins num_freq_bins:{} num_parts:{} complex:{} num_bins:{} octaves:{}",num_freq_bins,num_parts,complex, num_bins,octaves);
     let mut bin_assignments = vec![0; num_bins];
+
+    let start_bin = if octaves < 1 {
+        1
+    } else {
+        1 + (num_freq_bins as f32 / (2. as f32).powf(octaves as f32)) as usize
+    };
+    println!("start_bin: {}",start_bin);
 
     // don't really need correct samplerate ...
     let sample_rate = num_freq_bins as f32;
     // Calculate frequency for each bin (excluding DC and Nyquist)
     // Start from bin 1 to avoid log(0)
-    let min_freq = sample_rate / (2.0 * num_freq_bins as f32); // Frequency of bin 1
+    let min_freq = (start_bin-1) as f32 * (sample_rate / (2.0 * (num_freq_bins) as f32)); // Frequency of starting bin
     let max_freq = sample_rate / 2.0; // Nyquist frequency
-
+    
     // Calculate log frequency range
     let log_min = min_freq.ln();
     let log_max = max_freq.ln();
     let log_range = log_max - log_min;
 
+    log::info!("min_freq: {},max_freq: {},log_min: {}, log_max: {}, log_range: {}",min_freq, max_freq, log_min, log_max, log_range);
+
+    for bin in 0..start_bin {
+        bin_assignments[bin] = 0;
+    }
+
     // Assign each bin to a part
-    for bin in 0..num_freq_bins + 1 {
-        if bin == 0 {
-            // DC component - assign to first part
-            bin_assignments[bin] = 0;
-        } else {
-            // Calculate frequency for this bin
-            let freq = (bin as f32) * sample_rate / (2.0 * num_freq_bins as f32);
+    for bin in start_bin..num_freq_bins + 1 {
+        // Calculate frequency for this bin
+        let freq = (bin as f32) * sample_rate / (2.0 * num_freq_bins as f32);
 
-            // Convert to log scale
-            let log_freq = freq.ln();
+        // Convert to log scale
+        let log_freq = freq.ln();
 
-            // Normalize to 0-1 range
-            let normalized = (log_freq - log_min) / log_range;
+        // Normalize to 0-1 range
+        let normalized = (log_freq - log_min) / log_range;
 
-            // Calculate which part this bin belongs to
-            let part = (normalized * num_parts as f32).floor() as usize;
+        // Calculate which part this bin belongs to
+        let part = (normalized * num_parts as f32).floor() as usize;
 
-            // Clamp to valid range (in case of floating point errors)
-            bin_assignments[bin] = part.min(num_parts - 1);
-            if complex && bin <= num_freq_bins {
-                bin_assignments[num_bins - bin] = bin_assignments[bin];
-            }
+        // Clamp to valid range (in case of floating point errors)
+        bin_assignments[bin] = part.min(num_parts - 1);
+        if complex && bin <= num_freq_bins {
+            bin_assignments[num_bins - bin] = bin_assignments[bin];
         }
     }
     bin_assignments
@@ -228,15 +236,16 @@ pub fn distribute_grouped(
     num_freq_bins: usize,
     num_parts: usize,
     complex: bool,
+    octaves: u8,
     group_size: usize,
-    func: &dyn Fn(usize, usize, bool) -> Vec<usize>,
+    func: &dyn Fn(usize, usize, bool, u8) -> Vec<usize>,
 ) -> Vec<usize> {
     log::info!("distribute_grouped num_freq_bins:{} num_parts:{} complex:{} group_size:{}",num_freq_bins,num_parts,complex, group_size);
     if group_size < 1 {
-        return func(num_freq_bins, num_parts, complex);
+        return func(num_freq_bins, num_parts, complex, octaves);
     }
     let num_bins = num_freq_bins / group_size;
-    let mut bin_assignments = func(num_freq_bins, num_bins, complex);
+    let mut bin_assignments = func(num_freq_bins, num_bins, complex, octaves);
     for bin in 0..bin_assignments.len() {
         bin_assignments[bin] = bin_assignments[bin] % num_parts;
     }

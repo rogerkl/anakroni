@@ -68,6 +68,7 @@ impl STFTProcessor {
         num_parts: usize,
         group_size: usize,
         log: bool,
+        octaves: u8,
     ) -> Result<STFTProcessor> {
         log::info!("prepare_split_part  part_index:{} num_parts:{} group_size:{} log:{}",part_index,num_parts,group_size, log);
         let config = self.config.clone();
@@ -76,15 +77,16 @@ impl STFTProcessor {
 
         let bin_assignments = if group_size == 0 {
             if log {
-                distribute_log_bins(temporal_config.fft_size / 2, num_parts, true)
+                distribute_log_bins(temporal_config.fft_size / 2, num_parts, true, octaves)
             } else {
-                distribute_lin_bins(temporal_config.fft_size / 2, num_parts, true)
+                distribute_lin_bins(temporal_config.fft_size / 2, num_parts, true, octaves)
             }
         } else {
             distribute_grouped(
                 temporal_config.fft_size / 2,
                 num_parts,
                 true,
+                octaves,
                 group_size,
                 if log {
                     &distribute_log_bins
