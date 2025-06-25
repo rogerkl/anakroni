@@ -8,6 +8,7 @@
 use wasm_bindgen::prelude::*;
 
 pub mod audio_io;
+pub mod crossfade;
 pub mod processor;
 pub mod spectrogram;
 pub mod stft;

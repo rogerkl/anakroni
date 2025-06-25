@@ -4,9 +4,16 @@
 //! that are used by client applications.
 
 use crate::audio_io::{read_audio_file, write_audio_file, AudioInfo};
+use crate::crossfade::{apply_crossfade_to_distribution, BinAmplitude, PartBinAmplitudes};
 use crate::processor::STFTProcessor;
 use crate::stft::STFTConfig;
 use crate::Result;
+use std::collections::HashMap;
+
+#[cfg(not(test))]
+use log::{info, warn}; // Use log crate when building application
+#[cfg(test)]
+use std::{println as info, println as warn};
 
 /// Load audio from file into an STFTProcessor with analysis
 #[cfg(not(target_arch = "wasm32"))]
@@ -120,13 +127,24 @@ pub fn frequency_to_bin(frequency: f64, sample_rate: u32, fft_size: usize) -> us
 /// Example we do fft on 1024 sample points = 512 num_freq_bins
 /// Real fft: dc + num_freqs = 513 bins (0=dc, 512=nyquist)
 /// Complex fft: dc + num_freqs + num_freqs-1 = 1024 bins (0=dc, 512=nyquist)
-pub fn distribute_lin_bins(num_freq_bins: usize, num_parts: usize, complex: bool, octaves: u8) -> Vec<usize> {
+pub fn distribute_lin_bins(
+    num_freq_bins: usize,
+    num_parts: usize,
+    complex: bool,
+    octaves: u8,
+) -> Vec<usize> {
     let num_bins = if complex {
         num_freq_bins * 2
     } else {
         num_freq_bins + 1
     };
-    log::info!("distribute_lin_bins num_freq_bins:{} num_parts:{} complex:{} num_bins:{}",num_freq_bins,num_parts,complex, num_bins);
+    log::info!(
+        "distribute_lin_bins num_freq_bins:{} num_parts:{} complex:{} num_bins:{}",
+        num_freq_bins,
+        num_parts,
+        complex,
+        num_bins
+    );
     let mut bin_assignments = vec![0; num_bins];
 
     // Assign each bin to a part
@@ -151,13 +169,25 @@ pub fn distribute_lin_bins(num_freq_bins: usize, num_parts: usize, complex: bool
 /// Example we do fft on 1024 sample points = 512 num_freq_bins
 /// Real fft: dc + num_freqs = 513 bins (0=dc, 512=nyquist)
 /// Complex fft: dc + num_freqs + num_freqs-1 = 1024 bins (0=dc, 512=nyquist)
-pub fn distribute_log_bins(num_freq_bins: usize, num_parts: usize, complex: bool, octaves: u8) -> Vec<usize> {
+pub fn distribute_log_bins(
+    num_freq_bins: usize,
+    num_parts: usize,
+    complex: bool,
+    octaves: u8,
+) -> Vec<usize> {
     let num_bins = if complex {
         num_freq_bins * 2
     } else {
         num_freq_bins + 1
     };
-    log::info!("distribute_log_bins num_freq_bins:{} num_parts:{} complex:{} num_bins:{} octaves:{}",num_freq_bins,num_parts,complex, num_bins,octaves);
+    log::info!(
+        "distribute_log_bins num_freq_bins:{} num_parts:{} complex:{} num_bins:{} octaves:{}",
+        num_freq_bins,
+        num_parts,
+        complex,
+        num_bins,
+        octaves
+    );
     let mut bin_assignments = vec![0; num_bins];
 
     let start_bin = if octaves < 1 {
@@ -165,21 +195,28 @@ pub fn distribute_log_bins(num_freq_bins: usize, num_parts: usize, complex: bool
     } else {
         1 + (num_freq_bins as f32 / (2. as f32).powf(octaves as f32)) as usize
     };
-    println!("start_bin: {}",start_bin);
+    println!("start_bin: {}", start_bin);
 
     // don't really need correct samplerate ...
     let sample_rate = num_freq_bins as f32;
     // Calculate frequency for each bin (excluding DC and Nyquist)
     // Start from bin 1 to avoid log(0)
-    let min_freq = (start_bin-1) as f32 * (sample_rate / (2.0 * (num_freq_bins) as f32)); // Frequency of starting bin
+    let min_freq = (start_bin - 1) as f32 * (sample_rate / (2.0 * (num_freq_bins) as f32)); // Frequency of starting bin
     let max_freq = sample_rate / 2.0; // Nyquist frequency
-    
+
     // Calculate log frequency range
     let log_min = min_freq.ln();
     let log_max = max_freq.ln();
     let log_range = log_max - log_min;
 
-    log::info!("min_freq: {},max_freq: {},log_min: {}, log_max: {}, log_range: {}",min_freq, max_freq, log_min, log_max, log_range);
+    log::info!(
+        "min_freq: {},max_freq: {},log_min: {}, log_max: {}, log_range: {}",
+        min_freq,
+        max_freq,
+        log_min,
+        log_max,
+        log_range
+    );
 
     for bin in 0..start_bin {
         bin_assignments[bin] = 0;
@@ -240,7 +277,13 @@ pub fn distribute_grouped(
     group_size: usize,
     func: &dyn Fn(usize, usize, bool, u8) -> Vec<usize>,
 ) -> Vec<usize> {
-    log::info!("distribute_grouped num_freq_bins:{} num_parts:{} complex:{} group_size:{}",num_freq_bins,num_parts,complex, group_size);
+    log::info!(
+        "distribute_grouped num_freq_bins:{} num_parts:{} complex:{} group_size:{}",
+        num_freq_bins,
+        num_parts,
+        complex,
+        group_size
+    );
     if group_size < 1 {
         return func(num_freq_bins, num_parts, complex, octaves);
     }
@@ -250,6 +293,26 @@ pub fn distribute_grouped(
         bin_assignments[bin] = bin_assignments[bin] % num_parts;
     }
     bin_assignments
+}
+
+/// Distribute bins with crossfade support
+pub fn distribute_bins_with_crossfade(
+    num_freq_bins: usize,
+    num_parts: usize,
+    complex: bool,
+    octaves: u8,
+    log: bool,
+    crossfade_factor: f64,
+) -> Vec<PartBinAmplitudes> {
+    // Get hard distribution first
+    let hard_assignments = if log {
+        distribute_log_bins(num_freq_bins, num_parts, complex, octaves)
+    } else {
+        distribute_lin_bins(num_freq_bins, num_parts, complex, octaves)
+    };
+
+    // Apply crossfade
+    apply_crossfade_to_distribution(hard_assignments, crossfade_factor, num_parts)
 }
 
 /// Get analysis summary string for an STFTProcessor
@@ -543,5 +606,17 @@ mod tests {
             assert!(config.overlap_factor >= 1);
             assert!(config.overlap_factor <= 32);
         }
+    }
+
+    #[test]
+    fn test_distribute_lin_bins() {
+        let num_parts = 4;
+        let group_size = 0;
+        let octaves = 4;
+        let num_freq_bins = 32;
+        let complex = true;
+        let crossfade_distribution =
+            distribute_lin_bins(num_freq_bins, num_parts, complex, octaves);
+        info!("{:?}", crossfade_distribution);
     }
 }

@@ -4,14 +4,22 @@
 //! processing, and synthesis for multi-channel audio data.
 
 use crate::audio_io::AudioInfo;
+use crate::crossfade::{apply_crossfade_to_distribution, BinAmplitude, PartBinAmplitudes};
 use crate::stft::{STFTAnalyzer, STFTConfig, STFTFrame, STFTSynthesizer};
 use crate::temporal_fft::{
     TemporalBinFFT, TemporalFFTAnalysis, TemporalFFTAnalyzer, TemporalFFTConfig,
     TemporalFFTSynthesizer, TemporalOperation, TemporalStatistics,
 };
+use crate::utils::distribute_bins_with_crossfade;
 use crate::utils::{distribute_grouped, distribute_lin_bins, distribute_log_bins};
 use crate::Result;
 use num_complex::{Complex, Complex64};
+use std::collections::HashMap;
+
+#[cfg(not(test))]
+use log::{info, warn}; // Use log crate when building application
+#[cfg(test)]
+use std::{println as info, println as warn};
 
 /// Main STFT processor for multi-channel audio
 pub struct STFTProcessor {
@@ -70,7 +78,13 @@ impl STFTProcessor {
         log: bool,
         octaves: u8,
     ) -> Result<STFTProcessor> {
-        log::info!("prepare_split_part  part_index:{} num_parts:{} group_size:{} log:{}",part_index,num_parts,group_size, log);
+        log::info!(
+            "prepare_split_part  part_index:{} num_parts:{} group_size:{} log:{}",
+            part_index,
+            num_parts,
+            group_size,
+            log
+        );
         let config = self.config.clone();
         let audio_info = self.audio_info.clone();
         let temporal_config = self.temporal_config.clone();
@@ -139,7 +153,7 @@ impl STFTProcessor {
                             bin_index: bin_idx,
                             channel_index: ch_idx,
                             temporal_spectrum,
-                            original_frames:temporal_config.fft_size,
+                            original_frames: temporal_config.fft_size,
                         });
                         bin_ffts_index += 1;
                     }
@@ -1274,6 +1288,139 @@ impl STFTProcessor {
         }
     }
 }
+impl STFTProcessor {
+    pub fn prepare_split_part_with_crossfade(
+        &mut self,
+        part_index: usize,
+        num_parts: usize,
+        group_size: usize,
+        log: bool,
+        octaves: u8,
+        crossfade_factor: f64,
+    ) -> Result<STFTProcessor> {
+        log::info!(
+            "prepare_split_part_with_crossfade part_index:{} num_parts:{} group_size:{} log:{} crossfade:{}",
+            part_index, num_parts, group_size, log, crossfade_factor
+        );
+
+        let config = self.config.clone();
+        let audio_info = self.audio_info.clone();
+        let temporal_config = self.temporal_config.clone();
+        let num_freq_bins = temporal_config.fft_size / 2;
+
+        let crossfade_distribution = Self::get_crossfade_distribution(
+            num_parts,
+            group_size,
+            log,
+            octaves,
+            crossfade_factor,
+            num_freq_bins,
+        );
+
+        match &self.temporal_fft {
+            None => {
+                return Err("No temporal_fft in data".to_string());
+            }
+            Some(temporal_fft) => {
+                let mut bin_ffts =
+                    Vec::with_capacity(temporal_fft.num_channels * temporal_fft.num_frequency_bins);
+
+                let mut bin_ffts_index = 0;
+
+                // Process each channel separately
+                for ch_idx in 0..temporal_fft.num_channels {
+                    log::info!(
+                        "Preparing temporal FFT split with crossfade for channel {}/{}",
+                        ch_idx + 1,
+                        temporal_fft.num_channels
+                    );
+
+                    // Process each frequency bin in this channel
+                    for bin_idx in 0..temporal_fft.num_frequency_bins {
+                        let mut temporal_spectrum =
+                            vec![Complex64::new(0.0, 0.0); temporal_config.fft_size];
+
+                        for part_bin_amplitudes in &crossfade_distribution {
+                            if part_bin_amplitudes.part == part_index {
+                                for bin_amplitude in &part_bin_amplitudes.bin_amplitudes {
+                                    let original_value = temporal_fft.bin_ffts[bin_ffts_index]
+                                        .temporal_spectrum
+                                        .get(bin_amplitude.bin)
+                                        .copied()
+                                        .unwrap_or(Complex64::new(0.0, 0.0));
+                                    temporal_spectrum[bin_amplitude.bin] +=
+                                        original_value * bin_amplitude.amplitude;
+                                }
+                            }
+                        }
+
+                        bin_ffts.push(TemporalBinFFT {
+                            bin_index: bin_idx,
+                            channel_index: ch_idx,
+                            temporal_spectrum,
+                            original_frames: temporal_config.fft_size,
+                        });
+                        bin_ffts_index += 1;
+                    }
+                }
+
+                let temporal_fft_split = TemporalFFTAnalysis {
+                    bin_ffts,
+                    config: temporal_config,
+                    num_frequency_bins: temporal_fft.num_frequency_bins,
+                    num_channels: temporal_fft.num_channels,
+                };
+
+                let split_processor = Self {
+                    config,
+                    audio_info,
+                    channel_data: None,
+                    stft_frames: None,
+                    temporal_fft: Some(temporal_fft_split),
+                    temporal_config,
+                };
+                Ok(split_processor)
+            }
+        }
+    }
+
+    fn get_crossfade_distribution(
+        num_parts: usize,
+        group_size: usize,
+        log: bool,
+        octaves: u8,
+        crossfade_factor: f64,
+        num_freq_bins: usize,
+    ) -> Vec<PartBinAmplitudes> {
+        let crossfade_distribution = if group_size == 0 {
+            distribute_bins_with_crossfade(
+                num_freq_bins,
+                num_parts,
+                true,
+                octaves,
+                log,
+                crossfade_factor,
+            )
+        } else {
+            // For grouped distribution, apply crossfade to the grouped result
+            let hard_assignments = distribute_grouped(
+                num_freq_bins,
+                num_parts,
+                true,
+                octaves,
+                group_size,
+                if log {
+                    &distribute_log_bins
+                } else {
+                    &distribute_lin_bins
+                },
+            );
+            apply_crossfade_to_distribution(hard_assignments, crossfade_factor, num_parts)
+        };
+        crossfade_distribution
+    }
+}
+
 impl Default for STFTProcessor {
     fn default() -> Self {
         Self::new()
@@ -1434,5 +1581,24 @@ mod tests {
         let info = AudioInfo::new(44100, 2, 1000);
         let channels = vec![vec![0.0; 1000]]; // Only 1 channel, but info says 2
         assert!(processor.load_audio(info, channels).is_err());
+    }
+
+    #[test]
+    fn test_get_crossfade_distribution() {
+        let num_parts = 4;
+        let group_size = 0;
+        let log = false;
+        let octaves = 4;
+        let crossfade_factor = 0.5;
+        let num_freq_bins = 32;
+        let crossfade_distribution = STFTProcessor::get_crossfade_distribution(
+            num_parts,
+            group_size,
+            log,
+            octaves,
+            crossfade_factor,
+            num_freq_bins,
+        );
+        info!("{:?}", crossfade_distribution);
     }
 }

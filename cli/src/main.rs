@@ -764,20 +764,20 @@ fn process_command(command: &str, state: &mut AppState) {
         }
 
         "temporal_split" => {
-            if parts.len() < 3 || parts.len() > 6 {
-                println!("Usage: temporal_split <filename> <num_parts> [group_size] [log|lin] [octaves]");
-                println!("  filename:  Base filename for output files (e.g., 'output.wav' will produce 'output_0.wav', etc.)");
+            if parts.len() < 3 || parts.len() > 7 {
+                println!("Usage: temporal_split <filename> <num_parts> [group_size] [log|lin] [octaves] [crossfade_factor]");
+                println!("  filename:  Base filename for output files");
                 println!("  num_parts: Number of files to split into");
                 println!("  group_size: Number of consecutive bins to group together (default: 1)");
-                println!("  log|lin: distribute bins logarithmic or linear");
-                println!("  how many octaves to distribute, dividing down from highest temporal frequency,");
-                println!("                            lower octaves will be distributed to the lowest part");
+                println!("  log|lin: distribute bins logarithmic or linear (default: lin)");
+                println!("  octaves: how many octaves to distribute (default: all)");
+                println!(
+                    "  crossfade_factor: crossfade factor 0.0-0.5 (default: 0.0, no crossfade)"
+                );
                 return;
             }
 
             let filename = parts[1];
-
-            // Parse the num_parts parameter
             let num_parts = match parts[2].parse::<usize>() {
                 Ok(value) => {
                     if value == 0 {
@@ -792,7 +792,6 @@ fn process_command(command: &str, state: &mut AppState) {
                 }
             };
 
-            // Parse the optional group_size parameter (default to 1 if not provided)
             let group_size = if parts.len() >= 4 {
                 match parts[3].parse::<usize>() {
                     Ok(value) => value,
@@ -802,41 +801,54 @@ fn process_command(command: &str, state: &mut AppState) {
                     }
                 }
             } else {
-                1 // Default group size
+                1
             };
 
-            // Parse the optional log
             let log = if parts.len() >= 5 {
-                if "log" == parts[4].trim() {
-                    true
-                } else {
-                    false
-                }
+                "log" == parts[4].trim()
             } else {
                 false
             };
 
-            let octaves = if parts.len() == 6 {
+            let octaves = if parts.len() >= 6 {
                 match parts[5].parse::<u8>() {
                     Ok(value) => value,
                     Err(_) => {
-                        println!("Error: group_size must be a valid positive integer");
+                        println!("Error: octaves must be a valid positive integer");
                         return;
                     }
                 }
             } else {
-                0 // 0 = distribute all
+                0
+            };
+
+            let crossfade_factor = if parts.len() >= 7 {
+                match parts[6].parse::<f64>() {
+                    Ok(value) => {
+                        if !(0.0..=0.5).contains(&value) {
+                            println!("Error: crossfade_factor must be between 0.0 and 0.5");
+                            return;
+                        }
+                        value
+                    }
+                    Err(_) => {
+                        println!(
+                            "Error: crossfade_factor must be a valid number between 0.0 and 0.5"
+                        );
+                        return;
+                    }
+                }
+            } else {
+                0.0
             };
 
             println!(
-                "Splitting frequency spectrum into {} parts with group size {}...",
-                num_parts, group_size
-            );
+        "Splitting frequency spectrum into {} parts with group size {} and crossfade factor {}...",
+        num_parts, group_size, crossfade_factor
+    );
 
             // Generate output filenames based on the input filename
             let mut output_filenames = Vec::new();
-
-            // Handle filenames with or without extension
             let filename_parts: Vec<&str> = filename.rsplitn(2, '.').collect();
             let (base_name, extension) = if filename_parts.len() == 2 {
                 (filename_parts[1], format!(".{}", filename_parts[0]))
@@ -848,22 +860,24 @@ fn process_command(command: &str, state: &mut AppState) {
                 output_filenames.push(format!("{}_{}{}", base_name, i, extension));
             }
 
-            // Ensure we have FFT data
             if !state.processor.has_temporal_analysis() {
                 println!("No temporal FFT analysis available. Run temporal_analyze first.");
                 return;
             }
-            log::info!("split - num_parts: {},group_size: {}, log: {}, octaves: {}",num_parts,group_size,log,octaves);
 
             // Process each part and save to a file
             for (i, output_file) in output_filenames.iter().enumerate() {
                 println!("Processing part {}/{}...", i + 1, num_parts);
-                match state
-                    .processor
-                    .prepare_split_part(i, num_parts, group_size, log, octaves)
-                {
+                match state.processor.prepare_split_part_with_crossfade(
+                    i,
+                    num_parts,
+                    group_size,
+                    log,
+                    octaves,
+                    crossfade_factor,
+                ) {
                     Ok(mut split_processor) => {
-                        println!("Split part prepared");
+                        println!("Split part prepared with crossfade");
                         match split_processor.synthesize_from_temporal() {
                             Ok(_) => {
                                 println!("Temporal synthesis for split part complete!");
@@ -875,10 +889,10 @@ fn process_command(command: &str, state: &mut AppState) {
                             Err(e) => println!("Error during temporal synthesis: {}", e),
                         }
                     }
-                    Err(e) => println!("Error saving file: {}", e),
+                    Err(e) => println!("Error preparing split part: {}", e),
                 }
             }
-            println!("Temporal Frequency spectrum split completed");
+            println!("Temporal Frequency spectrum split with crossfade completed");
         }
 
         "process" => {
